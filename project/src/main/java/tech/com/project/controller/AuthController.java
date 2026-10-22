@@ -18,7 +18,7 @@ import tech.com.project.dto.response.UserProfileDto;
 import tech.com.project.service.AuthService;
 
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping({"/api/auth", ""})
 @RequiredArgsConstructor
 @Tag(name = "1. Autenticación y Autorización (RF-01)", description = "Operaciones de inicio de sesión con JWT y consulta de identidad del usuario")
 public class AuthController {
@@ -73,5 +73,34 @@ public class AuthController {
     public ResponseEntity<UserProfileDto> getCurrentUser() {
         UserProfileDto profile = authService.getCurrentUser();
         return ResponseEntity.ok(profile);
+    }
+
+    @PostMapping("/register")
+    @org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
+    @Operation(
+            summary = "Registrar nuevo técnico o usuario normal (solo ADMIN)",
+            description = "Permite a un usuario con rol ADMIN crear técnicos (TECHNICIAN) y usuarios regulares (USER).",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "201",
+                    description = "Usuario registrado exitosamente.",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserProfileDto.class))
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Datos inválidos, correo ya registrado o rol no permitido.",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ApiErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "Acceso denegado. Solo administradores pueden registrar usuarios.",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ApiErrorResponse.class))
+            )
+    })
+    public ResponseEntity<UserProfileDto> register(@Valid @RequestBody tech.com.project.dto.request.UserRegisterRequestDto request) {
+        UserProfileDto profile = authService.register(request);
+        return ResponseEntity.status(org.springframework.http.HttpStatus.CREATED).body(profile);
     }
 }

@@ -20,4 +20,13 @@ public interface AuthService {
      * @return DTO con los datos del perfil y roles.
      */
     UserProfileDto getCurrentUser();
+
+    /**
+     * Registra un nuevo usuario con rol TECHNICIAN o USER (solo ADMIN).
+     *
+     * @param request Datos del nuevo usuario a registrar.
+     * @return Perfil del usuario creado.
+     */
+    UserProfileDto register(tech.com.project.dto.request.UserRegisterRequestDto request);
 }
+
