@@ -56,7 +56,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // 2. Consulta y sincronización en segundo plano con la API
   await loadTicketDetails();
-  await Promise.all([loadComments(), loadHistory()]);
+  await Promise.all([loadComments(), loadHistory(), loadCsatRating()]);
 });
 
 /**
@@ -70,8 +70,8 @@ async function loadTicketDetails() {
     if (isNaN(numericId) || !Number.isInteger(numericId)) {
       const searchResults = await get(`${ENDPOINTS.TICKETS.BASE}?query=${encodeURIComponent(ticketId)}`);
       const matched = Array.isArray(searchResults)
-        ? searchResults.find((t) => t.code && t.code.toUpperCase() === ticketId.toUpperCase()) || searchResults[0]
-        : null;
+          ? searchResults.find((t) => t.code && t.code.toUpperCase() === ticketId.toUpperCase()) || searchResults[0]
+          : null;
 
       if (!matched || !matched.id) {
         throw new Error(`No se encontró ningún ticket con el código "${ticketId}".`);
@@ -352,7 +352,7 @@ async function loadTechniciansSelect() {
   const cachedTechs = Store.getTechnicians();
   if (cachedTechs && cachedTechs.length > 0) {
     select.innerHTML = '<option value="">Seleccione un técnico disponible...</option>' +
-      cachedTechs.map((t) => `<option value="${t.id}">${escapeHtml(t.fullName || t.email)} (${escapeHtml(t.email)})</option>`).join('');
+        cachedTechs.map((t) => `<option value="${t.id}">${escapeHtml(t.fullName || t.email)} (${escapeHtml(t.email)})</option>`).join('');
   } else {
     select.innerHTML = '<option value="">Cargando técnicos disponibles...</option>';
   }
@@ -368,13 +368,13 @@ async function loadTechniciansSelect() {
     }
 
     select.innerHTML =
-      '<option value="">Seleccione un especialista...</option>' +
-      list
-        .map(
-          (t) =>
-            `<option value="${t.id}">${escapeHtml(t.firstName || '')} ${escapeHtml(t.lastName || '')} (${escapeHtml(t.email)}) - Carga activa: ${t.activeTicketsCount ?? 0}</option>`
-        )
-        .join('');
+        '<option value="">Seleccione un especialista...</option>' +
+        list
+            .map(
+                (t) =>
+                    `<option value="${t.id}">${escapeHtml(t.firstName || '')} ${escapeHtml(t.lastName || '')} (${escapeHtml(t.email)}) - Carga activa: ${t.activeTicketsCount ?? 0}</option>`
+            )
+            .join('');
   } catch (err) {
     console.error('Error al cargar técnicos:', err);
     select.innerHTML = '<option value="">Error cargando técnicos</option>';
@@ -405,8 +405,8 @@ async function loadComments() {
 
     if (listEl) {
       listEl.innerHTML = list
-        .map(
-          (c) => `
+          .map(
+              (c) => `
         <div class="card" style="padding: 1.15rem 1.4rem; background: var(--surface-container-low); border-radius: var(--radius-xl); margin-bottom: 0.85rem;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
             <div style="display: flex; align-items: center; gap: 0.5rem;">
@@ -427,8 +427,8 @@ async function loadComments() {
           </p>
         </div>
       `
-        )
-        .join('');
+          )
+          .join('');
     }
   } catch (err) {
     console.error('Error al cargar comentarios:', err);
@@ -516,8 +516,8 @@ async function loadHistory() {
     }
 
     container.innerHTML = list
-      .map(
-        (h) => `
+        .map(
+            (h) => `
         <div style="padding: 0.85rem 1rem; border-left: 3px solid var(--primary); background: var(--surface-container-low); border-radius: 0 var(--radius-lg) var(--radius-lg) 0; margin-bottom: 0.75rem;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
             <div style="display: flex; align-items: center; gap: 0.35rem;">
@@ -532,8 +532,8 @@ async function loadHistory() {
           </div>
         </div>
       `
-      )
-      .join('');
+        )
+        .join('');
   } catch (err) {
     console.error('Error al cargar historial:', err);
     container.innerHTML = `
@@ -655,3 +655,90 @@ function setupRefreshButton() {
     });
   }
 }
+
+let selectedCsatScore = 5;
+
+/**
+ * Consulta y renderiza la encuesta de satisfacción del usuario (CSAT).
+ */
+async function loadCsatRating() {
+  const card = document.getElementById('csatCard');
+  const ratedView = document.getElementById('csatRatedView');
+  const rateForm = document.getElementById('csatRateForm');
+  const starsDisplay = document.getElementById('csatStarsDisplay');
+  const commentDisplay = document.getElementById('csatCommentDisplay');
+  if (!card) return;
+
+  const isClosed = currentTicket && currentTicket.statusName === 'CERRADA';
+  if (!isClosed) {
+    card.style.display = 'none';
+    return;
+  }
+
+  card.style.display = 'block';
+
+  try {
+    const rating = await get(`/api/tickets/${ticketId}/calificacion`);
+    if (rating && rating.puntuacion) {
+      if (rateForm) rateForm.style.display = 'none';
+      if (ratedView) ratedView.style.display = 'block';
+      if (starsDisplay) starsDisplay.textContent = '★'.repeat(rating.puntuacion) + '☆'.repeat(5 - rating.puntuacion);
+      if (commentDisplay) commentDisplay.textContent = rating.comentario ? `"${escapeHtml(rating.comentario)}"` : 'Sin comentario adicional.';
+      return;
+    }
+  } catch {
+    // Si no ha sido calificado
+  }
+
+  const user = getUser();
+  const isRequester = currentTicket && currentTicket.requesterId && user && currentTicket.requesterId === user.id;
+
+  if (isRequester) {
+    if (ratedView) ratedView.style.display = 'none';
+    if (rateForm) rateForm.style.display = 'block';
+
+    const starBtns = document.querySelectorAll('.star-btn');
+    starBtns.forEach(b => {
+      if (!b.dataset.bound) {
+        b.dataset.bound = 'true';
+        b.addEventListener('click', () => {
+          selectedCsatScore = parseInt(b.getAttribute('data-score'), 10);
+          starBtns.forEach(other => {
+            const sc = parseInt(other.getAttribute('data-score'), 10);
+            if (sc <= selectedCsatScore) {
+              other.style.background = 'var(--primary)';
+              other.style.color = 'white';
+            } else {
+              other.style.background = 'var(--surface-container-high)';
+              other.style.color = 'var(--on-surface)';
+            }
+          });
+        });
+      }
+    });
+
+    const submitBtn = document.getElementById('btnSubmitCsat');
+    if (submitBtn && !submitBtn.dataset.bound) {
+      submitBtn.dataset.bound = 'true';
+      submitBtn.addEventListener('click', async () => {
+        const comment = (document.getElementById('csatCommentInput')?.value || '').trim();
+        try {
+          submitBtn.disabled = true;
+          await post(`/api/tickets/${ticketId}/calificacion`, {
+            puntuacion: selectedCsatScore,
+            comentario: comment || null
+          });
+          showToast('¡Gracias por su calificación del servicio!', 'success');
+          await loadCsatRating();
+        } catch (err) {
+          showToast(err.message || 'Error al enviar calificación.', 'error');
+        } finally {
+          submitBtn.disabled = false;
+        }
+      });
+    }
+  } else {
+    card.style.display = 'none';
+  }
+}
+
